@@ -2,6 +2,7 @@
 import type { FoodEntry, NutritionTargets, UserProfile, WeightEntry } from '../types/models'
 import { isDate, localDate } from './dates'
 
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

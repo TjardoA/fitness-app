@@ -1,4 +1,5 @@
-﻿export type FitnessGoal = 'fat-loss' | 'muscle-gain' | 'recomposition' | 'maintenance'
+import type { CatalogExercise } from '../data/exercises'
+export type FitnessGoal = 'fat-loss' | 'muscle-gain' | 'recomposition' | 'maintenance'
 export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'high'
 export type Sex = 'female' | 'male'
 export interface NutritionTargets {
@@ -66,5 +67,54 @@ export interface AppData {
   nutrition: NutritionDay[]
   weights: WeightEntry[]
   workouts: Workout[]
+  customExercises: CatalogExercise[]
+  workoutPlan: WorkoutPlan
 }
 
+export type TargetMuscle = 'chest' | 'back' | 'front-delts' | 'side-delts' | 'rear-delts' | 'biceps' | 'triceps' | 'quads' | 'hamstrings' | 'glutes' | 'calves' | 'core' | 'forearms' | 'adductors' | 'abductors' | 'hip-flexors' | 'erectors' | 'neck'
+export interface PlannedExercise {
+  exerciseId: string
+  sets: number
+  reps: number
+  repsMax?: number // Optional upper end of a rep range; omitted for a fixed target.
+  weightKg: number | null // null means not set; zero is a deliberate unloaded setting.
+  restSeconds: number
+}
+export type TrainingFocus = 'all' | 'push' | 'pull' | 'legs' | 'arms' | 'upper' | 'upper-main' | 'shoulders-arms' | 'chest-back' | 'chest' | 'back' | 'shoulders' | 'full' | 'rest'
+export interface WorkoutDay {
+  id: string
+  name: string
+  type: 'workout' | 'rest'
+  targetMuscleGroups: TargetMuscle[]
+  exercises: PlannedExercise[]
+}
+export type TrainingDay = WorkoutDay
+export interface WorkoutSplit {
+  id: string
+  name: string
+  description: string
+  recommendedDaysPerWeek: number
+  days: WorkoutDay[]
+}
+export interface WorkoutPlan {
+  id: 'weekly-plan'
+  schemaVersion: 2
+  name: string
+  templateId: string | null
+  customized: boolean
+  equipment: string[]
+  gymConfigured: boolean
+  favorites: string[]
+  days: WorkoutDay[] // Ordered Monday through Sunday, independent of the chosen template.
+}
+// Input contract for a future recommendation service; not an automatic prescription.
+export interface WorkoutGenerationPreferences {
+  daysPerWeek: number
+  goal: FitnessGoal | 'strength' | 'general-fitness'
+  experience: 'beginner' | 'intermediate' | 'advanced'
+  equipment: string[]
+  favoriteExerciseIds: string[]
+  excludedExerciseIds: string[]
+  minutesPerSession: number
+  priorityMuscles: TargetMuscle[]
+}

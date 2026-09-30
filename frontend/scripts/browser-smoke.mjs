@@ -2,6 +2,7 @@
 // Run with a Vite server: node scripts/browser-smoke.mjs
 // Optional: FORMA_TEST_URL, BROWSER_PATH. A fresh temporary browser profile protects real data.
 import assert from 'node:assert/strict'
+import { checkWorkoutPlanner } from './workout-checks.mjs'
 import { spawn } from 'node:child_process'
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -13,7 +14,7 @@ const userData = await mkdtemp(join(tmpdir(), 'forma-browser-test-'))
 const artifacts = resolve('.test-artifacts')
 await mkdir(artifacts, { recursive: true })
 function launchBrowser() {
-  return spawn(browserPath, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+  return spawn(browserPath, ['--headless=new', '--disable-gpu', '--disable-extensions', '--no-first-run', '--no-default-browser-check',
     '--remote-debugging-port=0', `--user-data-dir=${userData}`, 'about:blank'], { windowsHide: true, stdio: 'ignore' })
 }
 let browser = launchBrowser()
@@ -48,7 +49,7 @@ async function field(name, value) {
   await evaluate(`(() => {
     const input = document.querySelector('[name="${name}"]');
     if (!input) throw new Error('Missing field ${name}');
-    const proto = input instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+    const proto = input instanceof HTMLSelectElement ? HTMLSelectElement.prototype : input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     Object.getOwnPropertyDescriptor(proto, 'value').set.call(input, ${JSON.stringify(String(value))});
     input.dispatchEvent(new Event('input', {bubbles:true}));
     input.dispatchEvent(new Event('change', {bubbles:true}));
@@ -137,6 +138,7 @@ try {
   await snapshot('home-mobile')
   assert.ok(await evaluate('document.documentElement.scrollWidth <= innerWidth'), 'mobile page must not overflow')
   console.log('PASS: empty onboarding, recommendation, custom targets, initial weight, reload and mobile width')
+  await checkWorkoutPlanner({ evaluate, route, field, clickText, waitText, reload, snapshot, call, waitFor })
 
   await route('nutrition', 'Fuel your everyday.')
   await clickText('+ Add food'); await fillFood('Chicken breast')
@@ -241,6 +243,9 @@ try {
   assert.equal(await evaluate(`document.querySelector('[name="weightKg"]').value`), '82')
   console.log('PASS: profile and food persist after closing and reopening the browser')
 
+  await evaluate("localStorage.removeItem('forma.accounts.v1')")
+  await reload('Make it personal.')
+  assert.equal(await evaluate(`document.querySelector('[name="weightKg"]').value`), '82', 'existing account migration preserves its profile')
   await clickText('Sign out'); await waitText('Your space is waiting.')
   await reload('Your space is waiting.')
   await evaluate("location.hash = '/nutrition'")
@@ -257,6 +262,19 @@ try {
   await evaluate(`document.querySelector('input[value="maintenance"]').click()`)
   await submit(); await waitText('Step 4'); await field('calories', 1900)
   await submit(); await waitText('Second account.')
+  await route('workout', 'Your week. Your workout.')
+  assert.equal(await evaluate(`document.querySelectorAll('.planned-exercises > li').length`), 0, 'new accounts start with an empty workout plan')
+  const secondPlan = await evaluate(`(async () => {
+    const session = JSON.parse(localStorage.getItem('forma.accounts.v1'));
+    const account = session.accounts.find(item => item.id === session.activeId);
+    const {createDataRepository} = await import('/src/services/dataRepository.ts');
+    return (await createDataRepository(account.databaseName).load()).workoutPlan;
+  })()`)
+  assert.deepEqual(secondPlan.favorites, [])
+  assert.deepEqual(secondPlan.equipment, [])
+  assert.equal(await evaluate(`(async()=>{const session=JSON.parse(localStorage.getItem('forma.accounts.v1'));const account=session.accounts.find(a=>a.id===session.activeId);const {createDataRepository}=await import('/src/services/dataRepository.ts');return (await createDataRepository(account.databaseName).load()).customExercises.length})()`),0,'custom exercises are isolated per account')
+  await evaluate(`document.querySelector('.planner-day[aria-label="Friday"]').click()`); await clickText('Make training day'); await evaluate(`document.querySelector('[data-catalog-exercise="pushup"] .exercise-card-copy > button').click()`)
+  await clickText('Save plan'); await waitText('Your plan, favorites and gym equipment are saved.')
   await route('nutrition', 'Fuel your everyday.')
   assert.ok(await hasText('0 / 1,900 kcal'))
   assert.ok(!await hasText('Today rice')); assert.ok(!await hasText('Yesterday oats'))
@@ -267,6 +285,10 @@ try {
   await route('profile', 'Make it personal.'); await clickText('Sign out')
   await waitText('Your space is waiting.')
   await clickText('Tjardo'); await waitText('Tjardo.')
+  await route('workout', 'Your week. Your workout.')
+  await evaluate(`document.querySelector('.planner-day[aria-label="Monday"]').click()`)
+  assert.equal(await evaluate(`document.querySelector('[name="sessionName"]').value`), 'My upper body', 'switching accounts retains the original plan')
+  assert.equal(await evaluate(`document.querySelector('[name="sets-incline-press"]').value`), '4')
   await route('nutrition', 'Fuel your everyday.')
   assert.ok(await hasText('300 / 2,500 kcal'))
   assert.ok(!await hasText('Second account food'))
@@ -278,6 +300,40 @@ try {
   await route('nutrition', 'Fuel your everyday.')
   assert.ok(await hasText('200 / 1,900 kcal'))
   console.log('PASS: sign out persists, new accounts start empty, cancel works, accounts retain separate food and weight histories')
+
+  const deletedDatabase = await evaluate(`JSON.parse(localStorage.getItem('forma.accounts.v1')).accounts.find(account => account.name === 'Second account').databaseName`)
+  await route('profile', 'Make it personal.')
+  await clickText('Delete account'); await waitText('This cannot be undone.')
+  await clickText('Cancel')
+  assert.ok(!await hasText('Permanently delete account'), 'cancel closes deletion confirmation')
+  await reload('Make it personal.')
+  assert.equal(await evaluate(`document.querySelector('[name="name"]').value`), 'Second account')
+  await clickText('Delete account'); await clickText('Permanently delete account')
+  await waitText('Your space is waiting.'); await reload('Your space is waiting.')
+  assert.ok(!await hasText('Second account'), 'deleted account stays removed after reload')
+  const counts = await evaluate(`new Promise((resolve, reject) => {
+    const request = indexedDB.open(${JSON.stringify(deletedDatabase)});
+    request.onerror = reject;
+    request.onsuccess = () => {
+      const db = request.result; const names = [...db.objectStoreNames];
+      const transaction = db.transaction(names); const counts = [];
+      names.forEach(name => { transaction.objectStore(name).count().onsuccess = event => counts.push(event.target.result); });
+      transaction.oncomplete = () => { db.close(); resolve(counts); };
+    };
+  })`)
+  assert.ok(counts.length > 0 && counts.every(count => count === 0), 'every account data store is cleared')
+  await clickText('Tjardo'); await waitText('Tjardo.')
+  await route('nutrition', 'Fuel your everyday.'); assert.ok(await hasText('300 / 2,500 kcal'))
+  await route('progress', 'Every little win.'); assert.ok(await hasText('82 kg'))
+  await evaluate(`localStorage.setItem('forma.profile.v1', JSON.stringify({ name: 'Do not restore' }))`)
+  await route('profile', 'Make it personal.')
+  await clickText('Delete account'); await clickText('Permanently delete account')
+  await waitText('Your space is waiting.'); await reload('Your space is waiting.')
+  assert.equal(await evaluate(`localStorage.getItem('forma.profile.v1')`), null)
+  assert.deepEqual(await evaluate(`JSON.parse(localStorage.getItem('forma.accounts.v1')).accounts`), [])
+  await clickText('Create new account'); await waitText('Step 1')
+  assert.equal(await evaluate(`document.querySelector('[name="name"]').value`), '')
+  console.log('PASS: account deletion requires confirmation, clears history, preserves other accounts and handles the last account without restoring legacy data')
 
   // Prepare phase-1 data in this test-only profile, then exercise the version upgrade.
   await evaluate(`(async () => {
@@ -298,8 +354,8 @@ try {
   await reload('Step 1')
   assert.equal(await evaluate(`document.querySelector('[name="name"]').value`), 'Returning user')
   assert.equal(await evaluate(`document.querySelector('[name="age"]').value`), '')
-  const retained = await evaluate(`new Promise(resolve => {
-    const request = indexedDB.open('forma',2); request.onsuccess = () => {
+  const retained = await evaluate(`new Promise((resolve,reject) => {
+    const request = indexedDB.open('forma'); request.onerror=()=>reject(request.error); request.onsuccess = () => {
       const db = request.result; const transaction = db.transaction('progress');
       const record = transaction.objectStore('progress').get('preserved');
       transaction.oncomplete = () => {db.close();resolve(record.result.note);};
@@ -307,6 +363,25 @@ try {
   })`)
   assert.equal(retained, 'Existing record')
   console.log('PASS: phase-1 profile migration and IndexedDB upgrade preserve existing records')
+  // Reproduce the old Workout render failure and verify the recovery action
+  // reloads the application without clearing saved browser data.
+  const beforeRecovery = await evaluate('JSON.stringify(localStorage)')
+  await evaluate(`(async () => {
+    const react = await import('/node_modules/.vite/deps/react.js');
+    const reactDom = await import('/node_modules/.vite/deps/react-dom_client.js');
+    const {createElement} = react.default ?? react;
+    const {createRoot} = reactDom.default ?? reactDom;
+    const {AppErrorBoundary} = await import('/src/components/AppErrorBoundary.tsx');
+    const container = document.createElement('div'); document.body.append(container);
+    function OldWorkoutPage() { const workouts = undefined; return workouts.filter(() => true); }
+    createRoot(container).render(createElement(AppErrorBoundary, null, createElement(OldWorkoutPage)));
+  })()`)
+  await waitText('Reload app')
+  await clickText('Reload app'); await pause(200); await waitText('Step 1')
+  assert.equal(await evaluate('JSON.stringify(localStorage)'), beforeRecovery)
+  assert.equal(await evaluate(`document.querySelector('[name="name"]').value`), 'Returning user')
+  assert.ok(!await hasText('Reload app'))
+  console.log('PASS: a Workout render failure offers reload recovery without clearing saved data')
   console.log(`Screenshots: ${artifacts}`)
 } finally {
   if (socket?.readyState === WebSocket.OPEN) {

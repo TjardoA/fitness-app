@@ -1,4 +1,4 @@
-﻿import { Icon } from '../components/Icon'
+import { Icon } from '../components/Icon'
 import { EmptyState, Meter, PageHeading } from '../components/ui'
 import { totalNutrition } from '../utils/nutrition'
 import { formatDate, localDate } from '../utils/dates'
@@ -24,6 +24,8 @@ export function HomePage({ data, profile, today }: { data: AppData; profile: Use
     return { date: localDate(date), label: date.toLocaleDateString('en-GB', { weekday: 'short' }) }
   })
   const trainedDays = new Set(completed.filter(workout => workout.date >= weekStart && workout.date <= today).map(workout => workout.date))
+  const plannedToday = data.workoutPlan.days[(new Date(today + 'T12:00:00').getDay() + 6) % 7]
+  const scheduledDays = data.workoutPlan.days.filter(day => day.type === 'workout').length
   return <>
     <PageHeading eyebrow={formatDate(today)} title={`${greeting}, ${profile.name}.`} description="Make time for yourself. Make today count."
       action={<a className="date-chip" href="#/progress"><span className="status-dot" /> Your daily overview</a>} />
@@ -34,8 +36,9 @@ export function HomePage({ data, profile, today }: { data: AppData; profile: Use
         <div className="workout-copy">
           <h2>Show up.<br />Get stronger.</h2>
           <p className="muted">{completedToday.length ? `${completedToday.length} workout(s) completed today` : 'No workout completed today.'}</p>
-          <p className="muted text-sm my-5">{profile.trainingDaysPerWeek} planned training {profile.trainingDaysPerWeek === 1 ? 'day' : 'days'} per week.</p>
-          <a href="#/workout" className="button button-primary">Explore templates <Icon name="arrow" /></a>
+          <p className="muted text-sm my-5">{scheduledDays ? `${scheduledDays} training ${scheduledDays === 1 ? 'day' : 'days'} in your weekly plan.` : `Your goal: ${profile.trainingDaysPerWeek} training ${profile.trainingDaysPerWeek === 1 ? 'day' : 'days'} per week.`}</p>
+          <p className="muted text-sm mb-4">{plannedToday.exercises.length ? `${plannedToday.name || 'Your plan'} · ${plannedToday.exercises.length} exercises today` : plannedToday.type === 'rest' ? 'Rest day. A little space to recover.' : 'No exercises planned today. Make it yours.'}</p>
+          <a href="#/workout" className="button button-primary">Your workout plan <Icon name="arrow" /></a>
           <p className="text-xs muted mt-3">Workout logging is coming next.</p>
         </div>
       </section>

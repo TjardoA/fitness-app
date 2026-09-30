@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
 import { EmptyState, PageHeading } from '../components/ui'
 import { NutritionSummary } from '../components/NutritionSummary'
 import { FoodEntryForm } from '../components/FoodEntryForm'
@@ -37,7 +37,7 @@ export function NutritionPage({ profile, days, today, actions, saving, error }: 
     <section className="card"><h2 className="mb-6">{date === today ? 'Today’s balance' : formatDate(date)}</h2><NutritionSummary consumed={consumed} targets={targets} />
       {date !== today && <p className="muted text-xs mt-5">{day ? 'Targets saved for this day.' : 'No entries for this date. Your current targets will be used if you add food.'}</p>}
     </section>
-    <p role="status" className="text-lime text-sm mt-4">{message}</p>
+    <p role="status" className="text-accent text-sm mt-4">{message}</p>
     {error && <p role="alert" className="text-orange text-sm mt-4">{error}</p>}
     {editor && <div className="mt-5"><FoodEntryForm key={date + (editor.entry?.id ?? editor.meal)} entry={editor.entry} meal={editor.meal} saving={saving} onSave={save} onCancel={() => setEditor(null)} /></div>}
     {!entries.length && <EmptyState title="No meals logged yet"><p>Add your first food to start this day. Nothing is pre-filled for you.</p></EmptyState>}

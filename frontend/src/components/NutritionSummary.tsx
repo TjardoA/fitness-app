@@ -1,4 +1,4 @@
-﻿import { Meter } from './ui'
+import { Meter } from './ui'
 import type { NutritionTargets } from '../types/models'
 
 export function NutritionSummary({ consumed, targets }: { consumed: NutritionTargets; targets: NutritionTargets }) {

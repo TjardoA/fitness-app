@@ -1,4 +1,4 @@
-﻿import { useState, type SubmitEvent } from 'react'
+import { useState, type SubmitEvent } from 'react'
 import { EmptyState, PageHeading } from '../components/ui'
 import { formatDate, newId } from '../utils/dates'
 import type { WeightEntry, Workout } from '../types/models'
@@ -36,7 +36,7 @@ export function ProgressPage({ weights, workouts, today, saving, error, onAdd }:
             <button className="button button-primary" type="submit">{saving ? 'Saving…' : 'Save weigh-in'}</button>
           </fieldset>
         </form>
-        <p role="status" className="text-sm text-lime">{message}</p>
+        <p role="status" className="text-sm text-accent">{message}</p>
         {error && <p role="alert" className="text-sm text-orange">{error}</p>}
         <p className="muted text-xs">A new weight does not change your targets. <a className="text-button" href="#/profile">Review your recommendations in Profile.</a></p>
       </section>
@@ -61,8 +61,8 @@ function WeightChart({ entries }: { entries: WeightEntry[] }) {
   return <figure className="weight-chart mt-5">
     <svg viewBox="0 0 320 120" role="img" aria-label="Recorded weight over time. Exact values are listed in weight history.">
       <path d="M12 110H308" stroke="var(--color-line)" />
-      <polyline points={points.map(point => `${point.x},${point.y}`).join(' ')} fill="none" stroke="var(--color-purple)" strokeWidth="2" />
-      {points.map((point, index) => <circle key={entries[index].id} cx={point.x} cy={point.y} r="3" fill="var(--color-purple)" />)}
+      <polyline points={points.map(point => `${point.x},${point.y}`).join(' ')} fill="none" stroke="var(--color-accent)" strokeWidth="2" />
+      {points.map((point, index) => <circle key={entries[index].id} cx={point.x} cy={point.y} r="3" fill="var(--color-accent)" />)}
     </svg>
     <figcaption className="muted text-xs">{formatDate(entries[0].date)} — {formatDate(entries[entries.length - 1].date)} · {min.toFixed(1)}–{max.toFixed(1)} kg</figcaption>
   </figure>

@@ -4,8 +4,14 @@ import { createDataRepository, dataRepository } from '../services/dataRepository
 import { accountStorage, type LocalAccount } from '../services/accountStorage'
 import { profileStorage } from '../services/profileStorage'
 import { localDate, newId } from '../utils/dates'
+import type { WorkoutPlan } from '../types/models'
+import { emptyWorkoutPlan, type CatalogExercise } from '../data/exercises'
 
-const emptyData = (): AppData => ({ profile: null, nutrition: [], weights: [], workouts: [] })
+// @refresh reset
+// Reload persisted data when this hook changes during development. Keeping an
+// older state shape across a schema update can leave new pages without their data.
+
+const emptyData = (): AppData => ({ profile: null, nutrition: [], weights: [], workouts: [], customExercises: [], workoutPlan: emptyWorkoutPlan() })
 
 export function useAppData() {
   const [data, setData] = useState<AppData | null>(null)
@@ -41,12 +47,12 @@ export function useAppData() {
           if (!result.profile || result.profile.id !== account.id) throw new Error('This local account could not be opened. Your data has not been changed.')
         }
         const savedAccounts = session?.accounts ?? []
-        const oldProfile = !savedAccounts.length && !result.profile ? profileStorage.loadLegacy() : null
+        const oldProfile = !session && !result.profile ? profileStorage.loadLegacy() : null
         if (active) {
           repository.current = createDataRepository(name)
           databaseName.current = name
           setData(result); setAccounts(savedAccounts); setLegacy(oldProfile)
-          setCreatingAccount(!savedAccounts.length); setError('')
+          setCreatingAccount(!session); setError('')
         }
       } catch (error) {
         if (active) setError(error instanceof Error ? error.message : 'Could not open local storage.')
@@ -104,6 +110,16 @@ export function useAppData() {
       window.location.hash = '/home'
     })
   }
+  function deleteAccount() {
+    return perform(async () => {
+      if (!data?.profile) throw new Error('No account is selected.')
+      if (databaseName.current === 'forma') localStorage.removeItem('forma.profile.v1')
+      await repository.current.deleteAccountData()
+      const session = accountStorage.remove(data.profile.id)
+      setAccounts(session.accounts); setData(emptyData()); setLegacy(null); setCreatingAccount(false)
+      window.location.hash = '/home'
+    })
+  }
   function createAccount() {
     if (savingRef.current) return
     databaseName.current = 'forma-account-' + newId()
@@ -113,7 +129,11 @@ export function useAppData() {
   return {
     data, accounts, creatingAccount, legacy, error, loading, saving,
     retry: () => { setLoading(true); setAttempt(value => value + 1) },
-    saveProfile, signOut, signIn, createAccount,
+    saveProfile, signOut, signIn, createAccount, deleteAccount,
+    saveWorkoutPlan: (plan: WorkoutPlan, customExercises: CatalogExercise[]) => perform(async () => {
+      await repository.current.saveWorkoutPlan(plan, customExercises)
+      setData(previous => previous && ({ ...previous, workoutPlan: plan, customExercises }))
+    }),
     cancelCreate: () => { if (!savingRef.current) { setCreatingAccount(false); setError('') } },
     saveFood: (date: string, targets: NutritionTargets, entry: FoodEntry) =>
       perform(async () => updateDay(await repository.current.saveFood(date, targets, entry))),

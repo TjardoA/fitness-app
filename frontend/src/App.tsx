@@ -1,4 +1,4 @@
-﻿import { AppLayout } from './components/AppLayout'
+import { AppLayout } from './components/AppLayout'
 import { useRoute } from './hooks/useRoute'
 import { useAppData } from './hooks/useAppData'
 import { useToday } from './hooks/useToday'
@@ -24,10 +24,10 @@ export default function App() {
     : <AccountsPage accounts={state.accounts} saving={saving} error={error} onSignIn={state.signIn} onCreate={state.createAccount} />
   const pages = {
     home: <HomePage data={data} profile={profile} today={today} />,
-    workout: <WorkoutPage workouts={data.workouts} today={today} />,
+    workout: <WorkoutPage customExercises={data.customExercises} plan={data.workoutPlan} today={today} saving={saving} error={error} onSave={state.saveWorkoutPlan} />,
     nutrition: <NutritionPage profile={profile} days={data.nutrition} today={today} actions={state} saving={saving} error={error} />,
     progress: <ProgressPage weights={data.weights} workouts={data.workouts} today={today} onAdd={state.addWeight} saving={saving} error={error} />,
-    profile: <ProfilePage profile={profile} error={error} saving={saving} onSave={state.saveProfile} onSignOut={state.signOut} />,
+    profile: <ProfilePage profile={profile} error={error} saving={saving} onSave={state.saveProfile} onSignOut={state.signOut} onDeleteAccount={state.deleteAccount} />,
     coach: <CoachPage />,
   }
   return <AppLayout key={profile.id} route={route}>{pages[route]}</AppLayout>
